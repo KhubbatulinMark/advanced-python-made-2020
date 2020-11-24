@@ -6,7 +6,6 @@ it allows you to load from a file, save, and query the inverted index.
 
 This file can also be imported as a module and contains the following
 functions:
-
 	* load_documents - load documents from file
 	* build_inverted_index - create Inverted Index from documents
 	* main - the main function of the script
@@ -16,17 +15,15 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, FileType, Ar
 from io import TextIOWrapper
 from collections import defaultdict
 from typing import List
-import logging
+
 
 from storage_policy import StructPolicy
-
-logger = logging.getLogger(__name__)
 
 DEFAULT_DATASET_PATH = "wikipedia_sample"
 DEFAULT_INDEX_PATH = "inverted.index"
 
 class EncodedFileType(FileType):
-    """TODO
+    """Сhanged FileType
     """
 
     def __call__(self, string):
@@ -48,6 +45,14 @@ class EncodedFileType(FileType):
         except OSError as Exception:
             message = "can't open '%s': %s"
             raise ArgumentTypeError(message % (string, Exception)) from Exception
+
+    def __repr__(self):
+        args = self._mode, self._bufsize
+        kwargs = [('encoding', self._encoding), ('errors', self._errors)]
+        args_str = ', '.join([repr(arg) for arg in args if arg != -1] +
+                             ['%s=%r' % (kw, arg) for kw, arg in kwargs
+                              if arg is not None])
+        return '%s(%s)' % (type(self).__name__, args_str)
 
 class InvertedIndex:
     """This class describes an Inverted Index
@@ -85,7 +90,7 @@ class InvertedIndex:
         storage_policy : object
             The storage policy
         """
-        logger.info("Dump inverted index to %s", filepath)
+        print(f"Dump inverted index to {filepath}", file=sys.stderr)
         storage_policy.dump(self.term2doc, filepath)
 
     @classmethod
@@ -104,7 +109,7 @@ class InvertedIndex:
         dict
             Dictionary type - key: document id, value: list of words in this document
         """
-        logger.info("Loading inverted index from %s", filepath)
+        print(f"Loading inverted index from {filepath}", file=sys.stderr)
         index = InvertedIndex()
         index.term2doc = storage_policy.load(filepath)
 
@@ -126,18 +131,19 @@ class InvertedIndex:
             "Words should be provided with a list of words, but user provided:",
             f"{repr(words)}"
         )
-        logger.debug("Query inverted index with request %s", (repr(words)))
+        print(f"Query inverted index with request {repr(words)}", file=sys.stderr)
         doc_id = set()
         first = True
         for word in words:
             if word not in self.term2doc.keys():
-                continue
+                doc_id = []
+                break
             if first:
                 doc_id.update(self.term2doc[word])
                 first = False
             else:
                 doc_id.intersection_update(set(self.term2doc[word]))
-        return list(doc_id)
+        return sorted(list(doc_id))
 
 
 def build_inverted_index(documents: dict) -> object:
@@ -152,7 +158,7 @@ def build_inverted_index(documents: dict) -> object:
     object
         Built InveretedIndex object
     """
-    logger.info("Building inverted index for provided documents....")
+    print("Building inverted index for provided documents....", file=sys.stderr)
     index = InvertedIndex()
     index.term2doc = defaultdict(list)
     for doc_id, words in documents.items():
@@ -176,7 +182,7 @@ def load_documents(filepath: str) -> dict:
     dict
         Dictionary type - key: document id, value: document text
     """
-    logger.info("Loading documents from file...")
+    print("Loading documents from file...", file=sys.stderr)
     with open(filepath, 'r', encoding='utf-8') as file:
         lines = [line for line in file.readlines() if line.strip()]
 
@@ -194,16 +200,29 @@ def build_callback(arguments):
     inverted_index.dump(arguments.inverted_index_filepath)
 
 def query_callback(arguments):
-    return process_queries(arguments.inverted_index_filepath, arguments.query_file)
-
-def process_queries(inverted_index_filepath, query_file):
     """Сallback for queries to the invested index"""
-    logger.debug("Read queries from %s", inverted_index_filepath)
+    if arguments.query:
+        return process_querie_from_cli(arguments.inverted_index_filepath, arguments.query)
+    print(repr(arguments.query_file))
+    return process_queries_from_files(arguments.inverted_index_filepath, arguments.query_file)
+
+def process_querie_from_cli(inverted_index_filepath, query):
+    """Process for query callback if query from CLI"""
+    print(f"Queries is {query}", file=sys.stderr)
+    inverted_index = InvertedIndex.load(inverted_index_filepath)
+    document_ids = inverted_index.query(query)
+    answers = list(map(str, document_ids))
+    print(','.join(answers))
+
+def process_queries_from_files(inverted_index_filepath, query_file):
+    """Process for query callback if query from file"""
+    print(f"Read queries from {inverted_index_filepath}", file=sys.stderr)
     inverted_index = InvertedIndex.load(inverted_index_filepath)
     for query in query_file:
-        query = query.strip()
-        document_ids = inverted_index.query([query])
-        logger.debug("%s", document_ids)
+        query_words = query.strip().split()
+        document_ids = inverted_index.query(query_words)
+        answers = list(map(str, document_ids))
+        print(','.join(answers))
 
 def setup_parser(parser):
     """Function for setup the parser"""
@@ -232,7 +251,7 @@ def setup_parser(parser):
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
     query_parse.add_argument(
-        "-i", "--input", dest="inverted_index_filepath",
+        "-i", "--index", dest="inverted_index_filepath",
         help="Path to load inverted index, default path is %(default)s",
         metavar='INDEX', default=DEFAULT_INDEX_PATH,
     )
@@ -243,31 +262,23 @@ def setup_parser(parser):
     )
     query_file_group = query_parse.add_mutually_exclusive_group(required=False)
     query_file_group.add_argument(
-        "--query-file-utf8", dest="query_file",
-        type=EncodedFileType('r', encoding='utf-8'),
-        default=TextIOWrapper(sys.stdin.buffer, encoding='utf-8'),
-        help="""Query to run against inverted index from file \
-                with uft8 encode""",
-    )
-    query_file_group.add_argument(
         "--query-file-cp1251", dest="query_file",
         type=EncodedFileType('r', encoding='cp1251'),
         default=TextIOWrapper(sys.stdin.buffer, encoding='cp1251'),
         help="""Query to run against inverted index from file \
                   with cp1251 encode""",
     )
-    query_parse.set_defaults(callback=query_callback)
-
-def setup_logger():
-    #logger = logging.getLogger('task_khubbatulin_mark_inverted_index')
-    logging.basicConfig(
-        stream=sys.stderr,
-        level=logging.DEBUG
+    query_file_group.add_argument(
+        "--query-file-utf8", dest="query_file",
+        type=EncodedFileType('r', encoding='utf-8'),
+        default=TextIOWrapper(sys.stdin.buffer, encoding='utf-8'),
+        help="""Query to run against inverted index from file \
+                with uft8 encode""",
     )
+    query_parse.set_defaults(callback=query_callback)
 
 def main():
     """Main function of the module"""
-    setup_logger()
     parser = ArgumentParser(
         prog="inverted-index",
         description="Tool to build, dump, load and query inverted index",

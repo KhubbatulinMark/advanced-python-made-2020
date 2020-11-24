@@ -3,8 +3,9 @@ from argparse import Namespace
 import pytest
 
 from task_khubbatulin_mark_inverted_index import (
-        InvertedIndex, load_documents,
-        build_inverted_index, query_callback, process_queries_from_files, process_querie_from_cli
+        InvertedIndex, load_documents, EncodedFileType,
+        build_inverted_index, query_callback, process_queries_from_files, process_querie_from_cli,
+        build_callback
 )
 from storage_policy import JSONPolicy, StructPolicy
 
@@ -120,6 +121,9 @@ def test_can_dump_and_load_inverted_index(tmpdir, small_dataset_index):
     assert small_dataset_index == load_inverted_index, (
         "load should return the same inverted index"
     )
+    assert {} != load_inverted_index, (
+        "load should return the same inverted index"
+    )
 
 QUERY_STR = dedent("""
     words
@@ -139,6 +143,21 @@ def tiny_dataset_cp1251_fio(tmpdir):
     dataset_fio = tmpdir.join('tiny_dataset.txt')
     dataset_fio.write(QUERY_STR.encode('cp1251'))
     return dataset_fio
+
+def test_process_build_does_process_build(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
+    index_fio = tmpdir.join('inverted.index')
+    process_build = Namespace(
+        dataset=DATASET_TINY_FPATH,
+        inverted_index_filepath=index_fio,
+        query_file=None,
+        query=None,
+    )
+    build_callback(process_build)
+    captured = capsys.readouterr()
+    assert "Building inverted index for provided documents" not in captured.out
+    assert "Building inverted index for provided documents" in captured.err
+    assert "Loading documents from file" in captured.err
+    assert "Loading documents from file" not in captured.out
 
 def test_process_query_does_process_query_from_correct_file_utf_8(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
     index_fio = tmpdir.join('inverted.index')

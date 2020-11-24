@@ -3,8 +3,9 @@ from argparse import Namespace
 import pytest
 
 from task_khubbatulin_mark_inverted_index import (
-        InvertedIndex, load_documents,
-        build_inverted_index, query_callback
+        InvertedIndex, load_documents, EncodedFileType,
+        build_inverted_index, query_callback, process_queries_from_files, process_querie_from_cli,
+        build_callback
 )
 from storage_policy import JSONPolicy, StructPolicy
 
@@ -120,34 +121,91 @@ def test_can_dump_and_load_inverted_index(tmpdir, small_dataset_index):
     assert small_dataset_index == load_inverted_index, (
         "load should return the same inverted index"
     )
+    assert {} != load_inverted_index, (
+        "load should return the same inverted index"
+    )
 
 QUERY_STR = dedent("""
-    words\n
-    such\n
-    A_word B_word\n
-    hard_rock\n
+    words
+    such
+    A_word B_word
+    hard_rock
 """)
 
 @pytest.fixture()
 def tiny_dataset_uft8_fio(tmpdir):
     dataset_fio = tmpdir.join('tiny_dataset.txt')
-    dataset_fio.write(DATASET_TINY_STR.encode('uft8'))
+    dataset_fio.write(QUERY_STR.encode('utf-8'))
     return dataset_fio
 
 @pytest.fixture()
 def tiny_dataset_cp1251_fio(tmpdir):
     dataset_fio = tmpdir.join('tiny_dataset.txt')
-    dataset_fio.write(DATASET_TINY_STR.encode('cp1251'))
+    dataset_fio.write(QUERY_STR.encode('cp1251'))
     return dataset_fio
 
-# def test_process_query_does_process_query_from_correct_file(tmpdir, capsys):
-#     index_fio = tmpdir.join('inverted.index')
-#     tiny_dataset_index.dump(index_fio)
-#     query_arguments = Namespace(
-#         inverted_index_filepath=index_fio,
-#         query_file=tiny_dataset_uft8_fio
-#     )
-#     assert "load in"
-#     query_callback(query_arguments)
-#     assert 1 == 0
+def test_process_build_does_process_build(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
+    index_fio = tmpdir.join('inverted.index')
+    process_build = Namespace(
+        dataset=DATASET_TINY_FPATH,
+        inverted_index_filepath=index_fio,
+        query_file=None,
+        query=None,
+    )
+    build_callback(process_build)
+    captured = capsys.readouterr()
+    assert "Building inverted index for provided documents" not in captured.out
+    assert "Building inverted index for provided documents" in captured.err
+    assert "Loading documents from file" in captured.err
+    assert "Loading documents from file" not in captured.out
 
+def test_process_query_does_process_query_from_correct_file_utf_8(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
+    index_fio = tmpdir.join('inverted.index')
+    tiny_dataset_index.dump(index_fio)
+    with open(tiny_dataset_uft8_fio, encoding='utf8') as fin:
+        process_queries_from_files = Namespace(
+            inverted_index_filepath=index_fio,
+            query_file=fin,
+            query=None
+        )
+        query_callback(process_queries_from_files)
+        captured = capsys.readouterr()
+        assert "Read queries from" not in captured.out
+        assert "Read queries from" in captured.err
+        assert "Query inverted index with request" in captured.err
+        assert "Query inverted index with request" not in captured.out
+        assert "123" and '2' and '37' in captured.out
+
+def test_process_query_does_process_query_from_correct_file_cp1251(tmpdir, tiny_dataset_index, tiny_dataset_cp1251_fio, capsys):
+    index_fio = tmpdir.join('inverted.index')
+    tiny_dataset_index.dump(index_fio)
+    with open(tiny_dataset_cp1251_fio, encoding='cp1251') as fin:
+        process_queries_from_files = Namespace(
+            inverted_index_filepath=index_fio,
+            query_file=fin,
+            query=None
+        )
+        query_callback(process_queries_from_files)
+        captured = capsys.readouterr()
+        assert "Read queries from" not in captured.out
+        assert "Read queries from" in captured.err
+        assert "Query inverted index with request" in captured.err
+        assert "Query inverted index with request" not in captured.out
+        assert "123" and '2' and '37' in captured.out
+
+def test_process_query_does_process_query_from_cli(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
+    index_fio = tmpdir.join('inverted.index')
+    tiny_dataset_index.dump(index_fio)
+    with open(tiny_dataset_uft8_fio, encoding='utf8') as fin:
+        process_querie_from_cli = Namespace(
+            inverted_index_filepath=index_fio,
+            query_file=None,
+            query=['words'],
+        )
+        query_callback(process_querie_from_cli)
+        captured = capsys.readouterr()
+        assert "Queries is" not in captured.out
+        assert "Queries is" in captured.err
+        assert "Query inverted index with request" in captured.err
+        assert "Query inverted index with request" not in captured.out
+        assert "123" and '2' and '37' in captured.out

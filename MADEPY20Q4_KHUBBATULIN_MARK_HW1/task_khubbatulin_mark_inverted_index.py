@@ -203,6 +203,7 @@ def query_callback(arguments):
     """Сallback for queries to the invested index"""
     if arguments.query:
         return process_querie_from_cli(arguments.inverted_index_filepath, arguments.query)
+    print(repr(arguments.query_file))
     return process_queries_from_files(arguments.inverted_index_filepath, arguments.query_file)
 
 def process_querie_from_cli(inverted_index_filepath, query):
