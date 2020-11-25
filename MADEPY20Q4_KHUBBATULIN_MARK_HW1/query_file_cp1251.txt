@@ -1,4 +1,0 @@
-two words
-even more words
-текстовый запрос
-кодировка uft8
