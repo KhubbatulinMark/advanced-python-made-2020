@@ -1,6 +1,7 @@
 from textwrap import dedent
 from argparse import Namespace
 import pytest
+import logging
 
 from task_Hubbatulin_Mark_inverted_index import (
         InvertedIndex, load_documents, EncodedFileType,
@@ -9,8 +10,9 @@ from task_Hubbatulin_Mark_inverted_index import (
 )
 from storage_policy import JSONPolicy, StructPolicy
 
+DATASET_BIG_FPATH = "../data/wikipedia_sample"
 DATASET_SMALL_FPATH = "../data/small_wikipedia_sample"
-DATASET_TINY_FPATH = "..data/tiny_wikipedia_sample"
+DATASET_TINY_FPATH = "../data/tiny_wikipedia_sample"
 
 DATASET_TINY_STR = dedent("""\
     123\tsame words A_word and nothing\n
@@ -42,6 +44,7 @@ def test_can_load_documents(tiny_dataset_fio):
     [
         pytest.param(DATASET_TINY_FPATH, 4, id="tiny_wikipedia_documents"),
         pytest.param(DATASET_SMALL_FPATH, 34, id="small_wikipedia_documents"),
+        pytest.param(DATASET_BIG_FPATH, 4100, id="big_wikipedia_documents", marks=[pytest.mark.slow]),
     ],
 )
 
@@ -61,13 +64,11 @@ def small_dataset_documents():
     documents = load_documents(DATASET_SMALL_FPATH)
     return documents
 
-def test_encoded_file_type_repr_whan_reading():
-    type = EncodedFileType('r')
-    assert  "FileType('r')" != repr(type)
-
-def test_encoded_file_type_repr_whan_writing():
-    type = EncodedFileType('w')
-    assert  "FileType('w')" != repr(type)
+def test_encoded_file_type_repr():
+    type_r = EncodedFileType('r')
+    type_w = EncodedFileType('w')
+    assert  "FileType('w')" != repr(type_r)
+    assert  "FileType('r')" != repr(type_w)
 
 def test_build_inverted_index_working_right(tiny_dataset_documents):
     test_inverted_index = build_inverted_index(tiny_dataset_documents)
@@ -152,68 +153,88 @@ def tiny_dataset_cp1251_fio(tmpdir):
     dataset_fio.write(QUERY_STR.encode('cp1251'))
     return dataset_fio
 
-def test_process_build_does_process_build(tmpdir, capsys):
-    index_fio = tmpdir.join('inverted.index')
-    process_build_args = Namespace(
-        dataset_filepath=DATASET_TINY_FPATH,
-        inverted_index_filepath=index_fio,
-        query_file=None,
-        query=None,
-    )
-    build_callback(process_build_args)
-    captured = capsys.readouterr()
-    assert "Building inverted index for provided documents" not in captured.out
-    assert "Building inverted index for provided documents" in captured.err
-    assert "Loading documents from file" in captured.err
-    assert "Loading documents from file" not in captured.out
-
-def test_process_query_does_process_query_from_correct_file_utf_8(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
-    index_fio = tmpdir.join('inverted.index')
-    tiny_dataset_index.dump(index_fio)
-    with open(tiny_dataset_uft8_fio, encoding='utf8') as fin:
-        process_queries_from_files = Namespace(
-            inverted_index_filepath=index_fio,
-            query_file=fin,
-            query=None
-        )
-        query_callback(process_queries_from_files)
-        captured = capsys.readouterr()
-        assert "Read queries from" not in captured.out
-        assert "Read queries from" in captured.err
-        assert "Query inverted index with request" in captured.err
-        assert "Query inverted index with request" not in captured.out
-        assert "123" and '2' and '37' in captured.out
-
-def test_process_query_does_process_query_from_correct_file_cp1251(tmpdir, tiny_dataset_index, tiny_dataset_cp1251_fio, capsys):
-    index_fio = tmpdir.join('inverted.index')
-    tiny_dataset_index.dump(index_fio)
-    with open(tiny_dataset_cp1251_fio, encoding='cp1251') as fin:
-        process_queries_from_files = Namespace(
-            inverted_index_filepath=index_fio,
-            query_file=fin,
-            query=None
-        )
-        query_callback(process_queries_from_files)
-        captured = capsys.readouterr()
-        assert "Read queries from" not in captured.out
-        assert "Read queries from" in captured.err
-        assert "Query inverted index with request" in captured.err
-        assert "Query inverted index with request" not in captured.out
-        assert "123" and '2' and '37' in captured.out
-
-def test_process_query_does_process_query_from_cli(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys):
-    index_fio = tmpdir.join('inverted.index')
-    tiny_dataset_index.dump(index_fio)
-    with open(tiny_dataset_uft8_fio, encoding='utf8') as fin:
-        process_querie_from_cli = Namespace(
+def test_process_build_does_process_build(tmpdir, caplog, capsys):
+    with caplog.at_level("DEBUG"):
+        index_fio = tmpdir.join('inverted.index')
+        process_build_args = Namespace(
+            dataset_filepath=DATASET_TINY_FPATH,
             inverted_index_filepath=index_fio,
             query_file=None,
-            query=[["words",]],
+            query=None,
         )
-        query_callback(process_querie_from_cli)
+        build_callback(process_build_args)
         captured = capsys.readouterr()
-        assert "Queries is" not in captured.out
-        assert "Queries is" in captured.err
-        assert "Query inverted index with request" in captured.err
-        assert "Query inverted index with request" not in captured.out
-        assert "123" and '2' and '37' in captured.out
+        assert '' == captured.out
+        assert '' == captured.err
+
+        assert any("Building inverted index for provided documents" in message for message in caplog.messages), (
+            "the is no 'Builind inverted index for provided documents' message in logs"
+        )
+        assert any("Loading documents from file" in message for message in caplog.messages), (
+            "the is no 'Loading documents from file' message in logs"
+        )
+        assert all(record.levelno <= logging.WARNING for record in caplog.records),(
+            "Application is unstable, there are WARNING+ logs message in logs"
+        )
+
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        pytest.param('utf8', id="utf8"),
+        pytest.param('cp1251', id="cp1251"),
+    ],
+)
+
+def test_process_query_does_process_query_from_correct_file(tmpdir, tiny_dataset_index, encoded, capsys, caplog):
+    with caplog.at_level("DEBUG"):
+        index_fio = tmpdir.join('inverted.index')
+        tiny_dataset_index.dump(index_fio)
+
+        dataset_fio = tmpdir.join('tiny_dataset.txt')
+        dataset_fio.write(QUERY_STR.encode(encoded))
+
+        with open(dataset_fio, encoding=encoded) as fin:
+            process_queries_from_files = Namespace(
+                inverted_index_filepath=index_fio,
+                query_file=fin,
+                query=None
+            )
+            query_callback(process_queries_from_files)
+            captured = capsys.readouterr()
+            assert '' == captured.err
+            assert "123" and '2' and '37' in captured.out
+
+            assert any("Read queries from" in message for message in caplog.messages), (
+                "the is no 'Read queries from' message in logs"
+            )
+            assert any("Query inverted index with request" in message for message in caplog.messages), (
+                "the is no 'Query inverted index with request' message in logs"
+            )
+            assert all(record.levelno <= logging.WARNING for record in caplog.records),(
+                "Application is unstable, there are WARNING+ logs message in logs"
+            )
+
+def test_process_query_does_process_query_from_cli(tmpdir, tiny_dataset_index, tiny_dataset_uft8_fio, capsys, caplog):
+    with caplog.at_level("DEBUG"):
+        index_fio = tmpdir.join('inverted.index')
+        tiny_dataset_index.dump(index_fio)
+        with open(tiny_dataset_uft8_fio, encoding='utf8') as fin:
+            process_querie_from_cli = Namespace(
+                inverted_index_filepath=index_fio,
+                query_file=None,
+                query=[["words",]],
+            )
+            query_callback(process_querie_from_cli)
+            captured = capsys.readouterr()
+            assert '' == captured.err
+            assert "123" and '2' and '37' in captured.out
+
+            assert any("Read queries from CLI" in message for message in caplog.messages), (
+                "the is no 'Read queries from CLI' message in logs"
+            )
+            assert any("Query inverted index with request" in message for message in caplog.messages), (
+                "the is no 'Query inverted index with request' message in logs"
+            )
+            assert all(record.levelno <= logging.WARNING for record in caplog.records), (
+                "Application is unstable, there are WARNING+ logs message in logs"
+            )
