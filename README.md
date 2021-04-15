@@ -12,9 +12,9 @@ conda install --file requirements.txt
 ```
 ## Table of content
 
-- [Inverted Index Module](#Inverted Index Module)
-- [StackOverflow Analytics](#StackOverflow Analytics)
-- [Asset Web Service](#Asset Web Service)
+- [Inverted Index Module] (#Inverted Index Module)
+- [StackOverflow Analytics] (#StackOverflow Analytics)
+- [Asset Web Service] (#Asset Web Service)
 
 
 ## Inverted Index Module
