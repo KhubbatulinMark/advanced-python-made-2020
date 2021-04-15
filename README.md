@@ -12,23 +12,26 @@ conda install --file requirements.txt
 ```
 ## Table of content
 
-- [Inverted Index Module] (#Inverted Index Module)
-- [StackOverflow Analytics] (#StackOverflow Analytics)
-- [Asset Web Service] (#Asset Web Service)
+- [Inverted Index Module](#inverted_index)
+- [StackOverflow Analytics](#stackoverflow)
+- [Asset Web Service](#asset)
 
 
-## Inverted Index Module
+<a name="inverted_index"><h2>Inverted Index Module</h2></a>
+ 
 This module is designed to work with Inverted Index.
 This module is based on the class Inverted index. It contains the logic of inverted 
 index work.
 it allows you to load from a file, save, and query the inverted index.
 
-## StackOverflow Analytics
+<a name="stackoverflow"><h2>StackOverflow Analytics</h2></a>
+
 Stackoverflow post analytics app. 
 The application provides a console interface for answering questions about 
 the most popular discussion topics for a specified period (years).
 
-## Asset Web Service
+
+<a name="asset"><h2>Asset Web Service</h2></a>
 
 Financial and analytical Web Service, which
 will allow you to monitor changes in the exchange rate and their impact on investment
